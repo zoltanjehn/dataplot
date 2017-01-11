@@ -66,7 +66,11 @@ class syntax_plugin_dataplot extends DokuWiki_Syntax_Plugin {
       'yrange'   => '',
       'gnuplot'  => '',
       'debug'    => false,
-      'version'  => ''
+      'version'  => '',
+      'linestyle'=> 1,
+      'legendpos'=> 'right top',
+      'dimension'=> 1,
+      'size_ratio'=> 1
     );
     $gnu_colors = array(
       'white',
@@ -79,7 +83,8 @@ class syntax_plugin_dataplot extends DokuWiki_Syntax_Plugin {
       'grey40',
       'black'
     );
-
+ 
+     
     // Prepare input
     $lines = explode("\n", $match);
     $conf = array_shift($lines);
@@ -91,10 +96,33 @@ class syntax_plugin_dataplot extends DokuWiki_Syntax_Plugin {
     $cols = explode(" ", preg_replace("!\s+!", " ", trim($lines[0])));
     $return['columns'] = count($cols);
 
+        $coundlegends = count($cols);
+	$legendarray = array();
+
+	for ($i=2; $i<=$return['columns']; $i++) {
+
+	$legendarray[$i]=' ';
+	}
     // Match config options
     // Note: treating xlabel and ylabel first then removing them from the
     //       config string, in order to avoid misinterpretations of
     //       further options.
+
+    if ( preg_match('/ylegends="([^"]*)"/i', $conf, $match) ) {
+      $legends_compressed = $match[1];
+      $legends_exploded = explode(" ",$legends_compressed);
+	 for ($i=2; $i<=$return['columns']; $i++) {
+    	$legendarray[$i] = $legends_exploded[$i-2];
+	
+	 }
+     
+    }
+
+
+
+    if ( preg_match('/legendpos="([^"]*)"/i', $conf, $match) ) {
+      $return['legendpos'] = $match[1];
+    }
     if ( preg_match('/xlabel="([^"]*)"/i', $conf, $match) ) {
       $return['xlabel'] = $match[1];
       $conf = preg_replace('/xlabel="([^"]*)"/i', '', $conf);
@@ -134,7 +162,10 @@ class syntax_plugin_dataplot extends DokuWiki_Syntax_Plugin {
     if ( preg_match('/\b(debug)\b/i', $conf, $match) ) {
       $return['debug'] = true;
     }
-
+    
+    if ( preg_match('/\bdimension=([0-9]+)\b/i', $conf, $match) ) {
+      $return['dimension'] = $match[1];
+    }
     // Force rebuild of images on update
     $return['version'] = date('Y-m-d H:i:s');
     $return['hash'] = (string) uniqid("dataplot_", true);
@@ -170,23 +201,50 @@ class syntax_plugin_dataplot extends DokuWiki_Syntax_Plugin {
     $gnu_code .= 'set terminal pngcairo enhanced dashed font "arial,14" linewidth 2'.$gnu_size."\n";
     $gnu_code .= $gnu_labels;
     $gnu_code .= $gnu_ranges;
-    $gnu_code .= "set output \"@gnu_output@\"\n";
-    for ($i=1; $i<sizeof($gnu_colors); $i++) {
-      $gnu_code .= "set style line $i linetype rgb \"".$gnu_colors[$i]."\" linewidth 1.2 pointtype $i\n";
+if ($return['dimension'] == 1)
+{
+    if ( strlen($return['legendpos']) > 0 ) {
+      $gnu_code .="set key ".$return['legendpos']."\n";
     }
+    else	
+	{
+	$gnu_code .="set nokey \n";
+}
+}
+else 
+{
+	$gnu_code .="set nokey \n";
+	$gnu_code .="set size ratio 1.0\n";
+}
+
+
+    $gnu_code .= "set output \"@gnu_output@\"\n";
+if ($return['dimension']== 1)
+{   
+ for ($i=1; $i<sizeof($gnu_colors); $i++) {
+      $gnu_code .= "set style line $i linetype rgb \"".$gnu_colors[$i]."\" linewidth 1.2 pointsize 0.0\n";
+    }
+}
     $gnu_code .= 'plot';
     $sep  = ' ';
+   
+   if ($return['dimension'] == 1){
     for ($i=2; $i<=$return['columns']; $i++) {
       $gnu_style = $i-1;
       if ( $return['smooth'] && ($return['plottype'] == 'linespoints') ) {
-        $gnu_code .= $sep.'"@gnu_input@" using 1:'.$i.' notitle smooth csplines with lines linestyle '.$gnu_style;
+        $gnu_code .= $sep.'"@gnu_input@" using 1:'.$i.'title "'. $legendarray[$i] .'" smooth csplines with lines linestyle '.$return['linestyle'].' linecolor '.$gnu_style;
         $sep = ", \\\n     ";
-        $gnu_code .= $sep.'"@gnu_input@" using 1:'.$i.' notitle with points linestyle '.$gnu_style;
+        $gnu_code .= $sep.'"@gnu_input@" using 1:'.$i.'title "'. $legendarray[$i].'" with lines linestyle '.$return['linestyle'].' linecolor '.$gnu_style;
       } else {
-        $gnu_code .= $sep.'"@gnu_input@" using 1:'.$i.' notitle with '.$return[plottype].' linestyle '.$gnu_style;
+        $gnu_code .= $sep.'"@gnu_input@" using 1:'.$i.'title "'. $legendarray[$i].'"  with '.$return[plottype].' linestyle '.$return['linestyle'].' linecolor '.$gnu_style;
       }
       $sep = ", \\\n     ";
+     }
     }
+  if ($return['dimension'] == 2){
+$gnu_code .= $sep.'"@gnu_input@" using 1:2:3 with image';
+$sep = ", \\\n     ";
+}
     $gnu_code .= "\n";
     $return['gnuplot'] = $gnu_code;
 
